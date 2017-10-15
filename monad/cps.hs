@@ -14,6 +14,24 @@ square x = x * x
 pythagoras :: Int -> Int -> Int
 pythagoras x y = add (square x) (square y)
 
+add_cps :: Int -> Int -> ((Int -> r) -> r)
+add_cps x y = \k -> k (add x y)
+
+square_cps :: Int -> ((Int -> r) -> r)
+square_cps x = \k -> k (square x)
+
+pythagoras_cps :: Int -> Int -> ((Int -> r) -> r)
+pythagoras_cps x y = \k ->
+ square_cps x $ \x_squared ->
+ square_cps y $ \y_squared ->
+ add_cps x_squared y_squared $ k
+
+thrice_cps :: (a -> ((a -> r) -> r)) -> a -> ((a -> r) -> r)
+thrice_cps f_cps x = \k ->
+ f_cps x $ \fx ->
+ f_cps fx $ \ffx ->
+ f_cps ffx $ k
+
 add_cont :: Int -> Int -> Cont r Int
 add_cont x y = return (add x y)
 
@@ -25,6 +43,21 @@ pythagoras_cont x y = do
     x_squared <- square_cont x
     y_squared <- square_cont y
     add_cont x_squared y_squared
+
+foo :: Int -> Cont r String
+foo x = callCC $ \k -> do
+  let y = x ^ 2 + 3
+  when (y > 20) $ k "greater than 20"
+  return (show $ y - 4)
+
+bar :: Char -> String -> Cont r Int
+bar c s = do
+    msg <- callCC $ \k -> do
+        let s0 = c : s
+        when (s0 == "你好") $ k "他们说你好呀"
+        let s1 = show s0
+        return ("他们似乎在说: " ++ s1)
+    return (length msg)
 
 fun :: Int -> String
 fun n = (`runCont` id) $ do
@@ -41,6 +74,14 @@ fun n = (`runCont` id) $ do
         return $ "(ns = " ++ (show ns) ++ ") " ++ (show n')
     return $ "Answer: " ++ str
 
+divExcpt :: Int -> Int -> (String -> Cont r Int) -> Cont r Int
+divExcpt x y handler = callCC $ \ok -> do
+  err <- callCC $ \notOK -> do
+    when (y == 0) $ notOK "Denominator 0"
+    ok $ x `div` y
+  handler err
+
+main :: IO()
 main = flip runContT return $ do
     lift $ putStrLn "alpha"
     (k, num) <- callCC $ \k -> let f x = k (f, x)
